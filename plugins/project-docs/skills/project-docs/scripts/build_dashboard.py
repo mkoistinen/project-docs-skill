@@ -440,6 +440,30 @@ body.panel-open #wrap{scroll-padding-right:min(460px,100vw)}
 .rel .rs{font-size:11px;white-space:nowrap}
 .rel .rs.done{color:var(--done)} .rel .rs.pending{color:var(--pending)} .rel .rs.neutral{color:var(--neutral)}
 .rel .rs.muted{color:var(--muted-c)}
+/* focus */
+.card .fbtn{position:absolute;top:5px;right:6px;width:22px;height:22px;padding:0;border:0;border-radius:50%;
+  background:var(--chip);color:var(--muted);font-size:14px;line-height:22px;display:none;cursor:pointer}
+.card:hover .fbtn,.card.root .fbtn{display:block}
+.card:hover .type,.card.root .type{visibility:hidden}
+.card .fbtn:hover{color:var(--text)}
+.card.root .fbtn{background:var(--edge-hl);color:#fff}
+.card.root{box-shadow:0 0 0 1px var(--edge-hl)}
+.card.ctx{opacity:.5}
+path.edge.ctx{opacity:.5}
+#focusbar{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;padding-top:8px;
+  border-top:1px dashed var(--line)}
+#focusbar[hidden]{display:none}
+#focusbar .flabel{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#fchips{display:inline-flex;gap:6px;flex-wrap:wrap}
+.fchip{display:inline-flex;align-items:center;gap:2px;background:var(--chip);border-left:3px solid var(--edge-hl);
+  border-radius:5px;padding:2px 2px 2px 7px;font:600 12px ui-monospace,Menlo,monospace}
+.fchip a{color:var(--text);text-decoration:none}
+.fchip button{border:0;background:none;padding:0 4px;color:var(--muted);cursor:pointer}
+.fchip button:hover{color:var(--text)}
+#fadd{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:3px 7px;font:inherit;width:190px}
+.ftoggle{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
+.muted{color:var(--muted)}
+#panel .pbtns{display:flex;gap:6px;align-items:center}
 #statusbox{display:none;position:fixed;left:16px;bottom:16px;width:min(520px,calc(100% - 32px));max-height:60%;
   overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;z-index:9}
 #statusbox.open{display:block}
@@ -463,6 +487,15 @@ body.panel-open #wrap{scroll-padding-right:min(460px,100vw)}
       <button data-mode="system">System</button><button data-mode="light">Light</button><button data-mode="dark">Dark</button>
     </div>
   </div>
+  <div id="focusbar" hidden>
+    <span class="flabel">Focus</span><span id="fchips"></span>
+    <span id="fcount" class="muted"></span>
+    <label class="ftoggle"><input type="checkbox" id="unsettled"> Unsettled only</label>
+    <input id="fadd" list="fadd-list" placeholder="Add a card…" aria-label="Add a card to the focus">
+    <datalist id="fadd-list"></datalist>
+    <span class="muted">or Shift-click ◎</span>
+    <button id="fexit">Exit focus (Esc)</button>
+  </div>
 </header>
 <div id="wrap"><div id="canvas"><svg id="edges"></svg></div></div>
 <aside id="panel"></aside>
@@ -471,16 +504,13 @@ body.panel-open #wrap{scroll-padding-right:min(460px,100vw)}
 const DATA = /*__DATA__*/null;
 const W=262, H=92, GAP=150, ROWGAP=34, PADX=20, TOP=40;
 const nodes = DATA.nodes, byId = new Map(nodes.map(n=>[n.id,n]));
-nodes.forEach(n=>{ n.children=[]; n.x=PADX+n.col*(W+GAP); n.y=TOP+n.row*(H+ROWGAP); });
+nodes.forEach(n=>{ n.children=[]; });
 nodes.forEach(n=>n.deps.forEach(d=>byId.get(d).children.push(n.id)));
-const maxCol = Math.max(0,...nodes.map(n=>n.col));
-const cols = Array.from({length:maxCol+1},(_,c)=>nodes.filter(n=>n.col===c).sort((a,b)=>a.row-b.row));
-const maxRows = Math.max(...cols.map(c=>c.length));
-const width = PADX*2 + (maxCol+1)*W + maxCol*GAP, height = TOP + maxRows*(H+ROWGAP) + 40;
 const canvas = document.getElementById('canvas'), svg = document.getElementById('edges');
-canvas.style.width = width+'px'; canvas.style.height = height+'px';
-svg.setAttribute('width',width); svg.setAttribute('height',height);
+const wrap = document.getElementById('wrap'), root = document.documentElement;
 const esc = s => s.replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const PREFIX_ORDER = ['OPEN','FND','EXP','CON','DEC','Q','REQ','GOAL'];
+const isSettled = n => n.state==='done' || n.state==='muted';
 
 // ---- stats
 const count = (p, st) => nodes.filter(n=>n.prefix===p && (!st || n.state===st)).length;
@@ -493,19 +523,12 @@ const stats = [
 document.getElementById('stats').innerHTML = stats.map(([k,v])=>`<span>${k}: <b>${v}</b></span>`).join('')
   + `<span>Built ${esc(DATA.built)}</span>`;
 
-// ---- column heads
-const heads = {0:'Foundations'}; heads[maxCol] = 'Goals';
-for (const [c,label] of Object.entries(heads)) {
-  const h = document.createElement('div'); h.className='colhead'; h.textContent=label;
-  h.style.left = (PADX + c*(W+GAP))+'px'; h.style.top='12px'; canvas.appendChild(h);
-}
-
-// ---- cards
+// ---- cards (created once; render() positions or hides them)
 const pendingDeps = n => n.deps.filter(d=>byId.get(d).state==='pending').length;
 for (const n of nodes) {
   const el = document.createElement('div');
   el.className = 'card '+n.state; el.id = 'card-'+n.id;
-  el.style.left=n.x+'px'; el.style.top=n.y+'px'; el.style.width=W+'px'; el.style.height=H+'px';
+  el.style.width=W+'px'; el.style.height=H+'px';
   const p = pendingDeps(n), total = n.deps.length;
   let extra = '';
   if (total && (n.prefix==='GOAL' || n.prefix==='Q')) {
@@ -514,12 +537,116 @@ for (const n of nodes) {
     extra = `<span class="pill bad">${p} input${p>1?'s':''} pending</span>`;
   }
   el.innerHTML = `<div class="top"><span class="id">${n.id}</span><span class="type">${n.type}</span></div>
+    <button class="fbtn" title="Focus on this card (Shift-click to add it to the focus)" aria-label="Focus on ${n.id}">◎</button>
     <div class="title" title="${esc(n.title)}">${esc(n.title)}</div>
     <div class="pills"><span class="pill ${n.state}" title="${esc(n.label)}">${esc(n.label.replace(/ \(.*\)$/, n.label.length>22?' *':'$&'))}</span>${extra}</div>`;
-  el.addEventListener('mouseenter',()=>{ if(!selected) focusOn(n.id); });
-  el.addEventListener('mouseleave',()=>{ if(!selected) clearFocus(); });
+  el.addEventListener('mouseenter',()=>{ if(!selected) highlight(n.id); });
+  el.addEventListener('mouseleave',()=>{ if(!selected) clearHighlight(); });
   el.addEventListener('click',e=>{ e.stopPropagation(); select(n.id); });
+  el.querySelector('.fbtn').addEventListener('click', e=>{ e.stopPropagation(); focusCard(n.id, e.shiftKey); });
   canvas.appendChild(el); n.el = el;
+}
+
+// ---- layout: longest dependency path picks the column; sources sit next to their first
+// consumer; barycenter sweeps order the rows. Runs on whatever subset is in view.
+function layout(ids, depsOf, kidsOf){
+  const col = new Map();
+  const depth = i => {
+    if (col.has(i)) return col.get(i);
+    col.set(i, 0);  // guard; the builder already rejects cycles
+    const d = 1 + Math.max(-1, ...depsOf(i).map(depth));
+    col.set(i, d); return d;
+  };
+  ids.forEach(depth);
+  ids.forEach(i=>{ const k = kidsOf(i);
+    if (!depsOf(i).length && k.length) col.set(i, Math.max(0, Math.min(...k.map(c=>col.get(c))) - 1)); });
+  const ncols = Math.max(0, ...ids.map(i=>col.get(i))) + 1;
+  const keyCmp = (a,b) => { const A=byId.get(a), B=byId.get(b);
+    return PREFIX_ORDER.indexOf(A.prefix)-PREFIX_ORDER.indexOf(B.prefix) || A.num-B.num; };
+  const cols = Array.from({length:ncols}, (_,c)=>ids.filter(i=>col.get(i)===c).sort(keyCmp));
+  const all = [...Array(ncols).keys()];
+  for (let it=0; it<12; it++) for (const dir of [1,-1]) {
+    const pos = new Map(); cols.forEach(c=>c.forEach((i,r)=>pos.set(i,r)));
+    for (const c of (dir===1 ? all.slice(1) : all.slice(0,-1).reverse())) {
+      const scored = cols[c].map((i,r)=>{
+        const ps = (dir===1 ? depsOf(i) : kidsOf(i)).filter(x=>pos.has(x)).map(x=>pos.get(x));
+        const loner = !depsOf(i).length && !kidsOf(i).length;
+        return [loner?1:0, ps.length ? ps.reduce((a,b)=>a+b,0)/ps.length : r, r, i];
+      });
+      scored.sort((a,b)=>a[0]-b[0] || a[1]-b[1] || a[2]-b[2]);
+      cols[c] = scored.map(s=>s[3]); cols[c].forEach((i,r)=>pos.set(i,r));
+    }
+  }
+  const out = new Map(); cols.forEach((c,ci)=>c.forEach((i,r)=>out.set(i,{col:ci,row:r})));
+  return {pos:out, ncols};
+}
+
+// ---- focus: focused cards, everything they depend on (all the way down), and their direct
+// users faded as context. "Unsettled only" hides settled inputs and joins the arrows across them.
+let focusIds = [], unsettledOnly = false, selected = null, view = null, edges = [];
+function computeView(){
+  if (!focusIds.length) {
+    return {ids: nodes.map(n=>n.id), deps: id=>byId.get(id).deps, ctx: new Set(), roots: new Set(), core: nodes.length};
+  }
+  const roots = new Set(focusIds), up = new Set();
+  const walk = i => byId.get(i).deps.forEach(d=>{ if (!up.has(d)) { up.add(d); walk(d); } });
+  focusIds.forEach(walk);
+  const core = new Set(focusIds);
+  up.forEach(a=>{ if (!roots.has(a) && !(unsettledOnly && isSettled(byId.get(a)))) core.add(a); });
+  const ctx = new Set();
+  focusIds.forEach(r=>byId.get(r).children.forEach(c=>{ if (!core.has(c)) ctx.add(c); }));
+  const memo = new Map();
+  const deps = id => {
+    if (ctx.has(id)) return byId.get(id).deps.filter(d=>roots.has(d));
+    if (memo.has(id)) return memo.get(id);
+    const res = new Set(), seen = new Set();
+    const dfs = i => byId.get(i).deps.forEach(d=>{
+      if (seen.has(d)) return; seen.add(d);
+      if (core.has(d)) res.add(d); else dfs(d);
+    });
+    dfs(id);
+    const arr = [...res]; memo.set(id, arr); return arr;
+  };
+  return {ids: [...core, ...ctx], deps, ctx, roots, core: core.size};
+}
+
+function render(){
+  view = computeView();
+  const vset = new Set(view.ids);
+  const kids = new Map(view.ids.map(i=>[i,[]]));
+  view.ids.forEach(i=>view.deps(i).forEach(d=>kids.get(d).push(i)));
+  view.kids = i => kids.get(i) || [];
+  const {pos, ncols} = layout(view.ids, view.deps, view.kids);
+  for (const n of nodes) {
+    const on = vset.has(n.id);
+    n.el.style.display = on ? '' : 'none';
+    n.el.classList.toggle('ctx', view.ctx.has(n.id));
+    n.el.classList.toggle('root', view.roots.has(n.id));
+    if (on) {
+      const p = pos.get(n.id); n.col = p.col; n.row = p.row;
+      n.x = PADX + n.col*(W+GAP); n.y = TOP + n.row*(H+ROWGAP);
+      n.el.style.left = n.x+'px'; n.el.style.top = n.y+'px';
+    }
+  }
+  const vnodes = view.ids.map(i=>byId.get(i));
+  const cols = Array.from({length:ncols}, (_,c)=>vnodes.filter(n=>n.col===c).sort((a,b)=>a.row-b.row));
+  const maxRows = Math.max(1, ...cols.map(c=>c.length));
+  const width = PADX*2 + ncols*W + (ncols-1)*GAP, height = TOP + maxRows*(H+ROWGAP) + 40;
+  canvas.style.width = width+'px'; canvas.style.height = height+'px';
+  svg.setAttribute('width', width); svg.setAttribute('height', height);
+  canvas.querySelectorAll('.colhead').forEach(h=>h.remove());
+  const heads = focusIds.length ? {} : {0:'Foundations', [ncols-1]:'Goals'};
+  for (const [c,label] of Object.entries(heads)) {
+    const h = document.createElement('div'); h.className='colhead'; h.textContent=label;
+    h.style.left = (PADX + c*(W+GAP))+'px'; h.style.top='12px'; canvas.appendChild(h);
+  }
+  edges = [];
+  view.ids.forEach(t=>view.deps(t).forEach(s=>edges.push({s:byId.get(s), t:byId.get(t)})));
+  route(cols, maxRows);
+  updateFocusBar();
+  if (selected && !vset.has(selected)) deselect();
+  else if (selected) highlight(selected);
+  else clearHighlight();
 }
 
 // ---- edge routing (orthogonal)
@@ -528,128 +655,128 @@ for (const n of nodes) {
 // its own entry port and arrowhead. (2) Paths favor the middle of a gap between columns,
 // or of the space between rows, and build outward from there (centre, +1, -1, +2, -2 ...).
 // (3) A horizontal run that crosses another source's vertical run draws a small hop.
-const edges = [];
-nodes.forEach(t=>t.deps.forEach(s=>edges.push({s:byId.get(s), t})));
-const PORT = H/2;
-const inPort = new Map();
-nodes.forEach(n=>{
-  const ins = n.deps.map(d=>byId.get(d)).sort((a,b)=>a.y-b.y || b.col-a.col);
-  const k = ins.length;
-  ins.forEach((d,i)=>inPort.set(d.id+'>'+n.id, k===1 ? n.y+PORT : n.y + H*(0.2 + 0.6*i/(k-1))));
-});
-const gapX0 = g => PADX + g*(W+GAP) + W;
-const blocked = (c,y,m=8) => cols[c].some(o => y > o.y-m && y < o.y+H+m);
-const CH_OFFS = [0,-6,6,-12,12];
-const chanUse = new Map(), srcChans = new Map(), trunks = new Map();
-function addTrunk(gap, src, a, b){
-  const key = gap+'|'+src;
-  let T = trunks.get(key);
-  if (!T) { T = {gap, src, lo:Infinity, hi:-Infinity}; trunks.set(key, T); }
-  T.lo = Math.min(T.lo, a, b); T.hi = Math.max(T.hi, a, b);
-  return T;
-}
-for (const e of edges) {
-  const s=e.s, t=e.t;
-  e.sy = s.y + PORT; e.ty = inPort.get(s.id+'>'+t.id); e.mid = null;
-  const inner = []; for (let c=s.col+1; c<t.col; c++) inner.push(c);
-  if (inner.length && inner.some(c=>blocked(c,e.sy))) {
-    // Needs a channel between rows. Reuse this source's existing channel if it fits.
-    let best = null;
-    for (const y of (srcChans.get(s.id)||[])) if (!inner.some(c=>blocked(c,y,2))) { best = y; break; }
-    if (best === null) {
-      const cands = new Set([TOP-18, TOP+maxRows*(H+ROWGAP)-ROWGAP/2+6]);
-      inner.forEach(c=>cols[c].forEach(o=>{ cands.add(o.y-ROWGAP/2); cands.add(o.y+H+ROWGAP/2); }));
-      let bc = Infinity, by = null;
-      for (const y of cands) {
-        if (inner.some(c=>blocked(c,y))) continue;
-        const cost = Math.abs(y-e.sy) + Math.abs(y-e.ty);
-        if (cost < bc) { bc = cost; by = y; }
-      }
-      const key = Math.round(by), k = chanUse.get(key)||0; chanUse.set(key, k+1);
-      best = by + CH_OFFS[k % CH_OFFS.length];
-      if (!srcChans.has(s.id)) srcChans.set(s.id, []);
-      srcChans.get(s.id).push(best);
-    }
-    e.mid = best;
-    e.T0 = addTrunk(s.col, s.id, e.sy, e.mid);
-    e.T1 = addTrunk(t.col-1, s.id, e.mid, e.ty);
-  } else {
-    e.T1 = addTrunk(t.col-1, s.id, e.sy, e.ty);
-  }
-}
-// Lanes: centre of the gap first, then alternate outward. Longest trunks claim the middle.
-const STEP = 9, maxSlots = Math.max(1, Math.floor((GAP-24)/STEP));
-const slotOrder = [0];
-for (let i=1; slotOrder.length<maxSlots; i++) { slotOrder.push(i); if (slotOrder.length<maxSlots) slotOrder.push(-i); }
-const byGap = new Map();
-for (const T of trunks.values()) { if (!byGap.has(T.gap)) byGap.set(T.gap, []); byGap.get(T.gap).push(T); }
-for (const [g, list] of byGap) {
-  list.sort((a,b)=>(b.hi-b.lo)-(a.hi-a.lo));
-  const used = new Map();
-  for (const T of list) {
-    let slot = slotOrder.find(sl => (used.get(sl)||[]).every(o => T.lo > o.hi+8 || T.hi < o.lo-8));
-    if (slot === undefined) slot = slotOrder[slotOrder.length-1];
-    if (!used.has(slot)) used.set(slot, []);
-    used.get(slot).push(T);
-    T.x = gapX0(g) + GAP/2 + slot*STEP;
-  }
-}
-for (const e of edges) {
-  const sx = e.s.x+W, tx = e.t.x-2;
-  e.pts = e.mid==null
-    ? [[sx,e.sy],[e.T1.x,e.sy],[e.T1.x,e.ty],[tx,e.ty]]
-    : [[sx,e.sy],[e.T0.x,e.sy],[e.T0.x,e.mid],[e.T1.x,e.mid],[e.T1.x,e.ty],[tx,e.ty]];
-}
-// Vertical runs, for hop detection.
-const VSEGS = [];
-for (const e of edges) for (let i=0; i<e.pts.length-1; i++) {
-  const [a,b] = [e.pts[i], e.pts[i+1]];
-  if (Math.abs(a[0]-b[0]) < 0.5 && Math.abs(a[1]-b[1]) > 0.5)
-    VSEGS.push({x:a[0], lo:Math.min(a[1],b[1]), hi:Math.max(a[1],b[1]), src:e.s.id});
-}
+const NS='http://www.w3.org/2000/svg';
 const dist = (a,b) => Math.hypot(a[0]-b[0], a[1]-b[1]);
 const along = (a,b,t) => { const L = dist(a,b)||1; return [a[0]+(b[0]-a[0])/L*t, a[1]+(b[1]-a[1])/L*t]; };
-function pathD(pts, src){
-  const R = 5, HOP = 4, n = pts.length, rr = [];
-  for (let i=1; i<n-1; i++) {
-    const d1 = dist(pts[i-1],pts[i]), d2 = dist(pts[i],pts[i+1]);
-    rr[i] = (d1<0.5 || d2<0.5) ? 0 : Math.min(R, d1/2, d2/2);
+function route(cols, maxRows){
+  const PORT = H/2;
+  const inPort = new Map();
+  for (const id of view.ids) {
+    const n = byId.get(id);
+    const ins = view.deps(id).map(d=>byId.get(d)).sort((a,b)=>a.y-b.y || b.col-a.col);
+    const k = ins.length;
+    ins.forEach((d,i)=>inPort.set(d.id+'>'+n.id, k===1 ? n.y+PORT : n.y + H*(0.2 + 0.6*i/(k-1))));
   }
-  let cur = pts[0], d = `M${cur[0]},${cur[1]}`;
-  for (let i=0; i<n-1; i++) {
-    const a = pts[i], b = pts[i+1];
-    const end = (i+1 < n-1) ? along(b, a, rr[i+1]) : b;
-    if (Math.abs(a[1]-b[1]) < 0.5 && Math.abs(a[0]-b[0]) > 0.5) {
-      const y = a[1], dir = Math.sign(b[0]-a[0]);
-      const xs = [...new Set(VSEGS.filter(v => v.src!==src && y > v.lo+0.5 && y < v.hi-0.5
-                   && (v.x-cur[0])*dir > HOP+1 && (end[0]-v.x)*dir > HOP+1).map(v => Math.round(v.x*10)/10))]
-                 .sort((p,q) => (p-q)*dir);
-      for (const x of xs) d += ` L${x-dir*HOP},${y} A${HOP},${HOP} 0 0 ${dir>0?1:0} ${x+dir*HOP},${y}`;
+  const gapX0 = g => PADX + g*(W+GAP) + W;
+  const blocked = (c,y,m=8) => cols[c].some(o => y > o.y-m && y < o.y+H+m);
+  const CH_OFFS = [0,-6,6,-12,12];
+  const chanUse = new Map(), srcChans = new Map(), trunks = new Map();
+  function addTrunk(gap, src, a, b){
+    const key = gap+'|'+src;
+    let T = trunks.get(key);
+    if (!T) { T = {gap, src, lo:Infinity, hi:-Infinity}; trunks.set(key, T); }
+    T.lo = Math.min(T.lo, a, b); T.hi = Math.max(T.hi, a, b);
+    return T;
+  }
+  for (const e of edges) {
+    const s=e.s, t=e.t;
+    e.sy = s.y + PORT; e.ty = inPort.get(s.id+'>'+t.id); e.mid = null;
+    const inner = []; for (let c=s.col+1; c<t.col; c++) inner.push(c);
+    if (inner.length && inner.some(c=>blocked(c,e.sy))) {
+      // Needs a channel between rows. Reuse this source's existing channel if it fits.
+      let best = null;
+      for (const y of (srcChans.get(s.id)||[])) if (!inner.some(c=>blocked(c,y,2))) { best = y; break; }
+      if (best === null) {
+        const cands = new Set([TOP-18, TOP+maxRows*(H+ROWGAP)-ROWGAP/2+6]);
+        inner.forEach(c=>cols[c].forEach(o=>{ cands.add(o.y-ROWGAP/2); cands.add(o.y+H+ROWGAP/2); }));
+        let bc = Infinity, by = null;
+        for (const y of cands) {
+          if (inner.some(c=>blocked(c,y))) continue;
+          const cost = Math.abs(y-e.sy) + Math.abs(y-e.ty);
+          if (cost < bc) { bc = cost; by = y; }
+        }
+        const key = Math.round(by), k = chanUse.get(key)||0; chanUse.set(key, k+1);
+        best = by + CH_OFFS[k % CH_OFFS.length];
+        if (!srcChans.has(s.id)) srcChans.set(s.id, []);
+        srcChans.get(s.id).push(best);
+      }
+      e.mid = best;
+      e.T0 = addTrunk(s.col, s.id, e.sy, e.mid);
+      e.T1 = addTrunk(t.col-1, s.id, e.mid, e.ty);
+    } else {
+      e.T1 = addTrunk(t.col-1, s.id, e.sy, e.ty);
     }
-    d += ` L${end[0]},${end[1]}`;
-    if (i+1 < n-1) { const c = pts[i+1], nx = along(c, pts[i+2], rr[i+1]); d += ` Q${c[0]},${c[1]} ${nx[0]},${nx[1]}`; cur = nx; }
   }
-  return d;
-}
-const NS='http://www.w3.org/2000/svg';
-svg.innerHTML = `<defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
-  <path d="M0,0 L8,4 L0,8 z" fill="context-stroke"/></marker></defs>`;
-for (const e of edges) {
-  const p = document.createElementNS(NS,'path');
-  p.setAttribute('d', pathD(e.pts, e.s.id)); p.setAttribute('marker-end','url(#arr)');
-  p.setAttribute('class','edge'+(e.s.state==='pending'?' dashed':''));
-  svg.appendChild(p); e.el = p;
+  // Lanes: centre of the gap first, then alternate outward. Longest trunks claim the middle.
+  const STEP = 9, maxSlots = Math.max(1, Math.floor((GAP-24)/STEP));
+  const slotOrder = [0];
+  for (let i=1; slotOrder.length<maxSlots; i++) { slotOrder.push(i); if (slotOrder.length<maxSlots) slotOrder.push(-i); }
+  const byGap = new Map();
+  for (const T of trunks.values()) { if (!byGap.has(T.gap)) byGap.set(T.gap, []); byGap.get(T.gap).push(T); }
+  for (const [g, list] of byGap) {
+    list.sort((a,b)=>(b.hi-b.lo)-(a.hi-a.lo));
+    const used = new Map();
+    for (const T of list) {
+      let slot = slotOrder.find(sl => (used.get(sl)||[]).every(o => T.lo > o.hi+8 || T.hi < o.lo-8));
+      if (slot === undefined) slot = slotOrder[slotOrder.length-1];
+      if (!used.has(slot)) used.set(slot, []);
+      used.get(slot).push(T);
+      T.x = gapX0(g) + GAP/2 + slot*STEP;
+    }
+  }
+  for (const e of edges) {
+    const sx = e.s.x+W, tx = e.t.x-2;
+    e.pts = e.mid==null
+      ? [[sx,e.sy],[e.T1.x,e.sy],[e.T1.x,e.ty],[tx,e.ty]]
+      : [[sx,e.sy],[e.T0.x,e.sy],[e.T0.x,e.mid],[e.T1.x,e.mid],[e.T1.x,e.ty],[tx,e.ty]];
+  }
+  // Vertical runs, for hop detection.
+  const VSEGS = [];
+  for (const e of edges) for (let i=0; i<e.pts.length-1; i++) {
+    const [a,b] = [e.pts[i], e.pts[i+1]];
+    if (Math.abs(a[0]-b[0]) < 0.5 && Math.abs(a[1]-b[1]) > 0.5)
+      VSEGS.push({x:a[0], lo:Math.min(a[1],b[1]), hi:Math.max(a[1],b[1]), src:e.s.id});
+  }
+  function pathD(pts, src){
+    const R = 5, HOP = 4, n = pts.length, rr = [];
+    for (let i=1; i<n-1; i++) {
+      const d1 = dist(pts[i-1],pts[i]), d2 = dist(pts[i],pts[i+1]);
+      rr[i] = (d1<0.5 || d2<0.5) ? 0 : Math.min(R, d1/2, d2/2);
+    }
+    let cur = pts[0], d = `M${cur[0]},${cur[1]}`;
+    for (let i=0; i<n-1; i++) {
+      const a = pts[i], b = pts[i+1];
+      const end = (i+1 < n-1) ? along(b, a, rr[i+1]) : b;
+      if (Math.abs(a[1]-b[1]) < 0.5 && Math.abs(a[0]-b[0]) > 0.5) {
+        const y = a[1], dir = Math.sign(b[0]-a[0]);
+        const xs = [...new Set(VSEGS.filter(v => v.src!==src && y > v.lo+0.5 && y < v.hi-0.5
+                     && (v.x-cur[0])*dir > HOP+1 && (end[0]-v.x)*dir > HOP+1).map(v => Math.round(v.x*10)/10))]
+                   .sort((p,q) => (p-q)*dir);
+        for (const x of xs) d += ` L${x-dir*HOP},${y} A${HOP},${HOP} 0 0 ${dir>0?1:0} ${x+dir*HOP},${y}`;
+      }
+      d += ` L${end[0]},${end[1]}`;
+      if (i+1 < n-1) { const c = pts[i+1], nx = along(c, pts[i+2], rr[i+1]); d += ` Q${c[0]},${c[1]} ${nx[0]},${nx[1]}`; cur = nx; }
+    }
+    return d;
+  }
+  svg.innerHTML = `<defs><marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0,0 L8,4 L0,8 z" fill="context-stroke"/></marker></defs>`;
+  for (const e of edges) {
+    const p = document.createElementNS(NS,'path');
+    p.setAttribute('d', pathD(e.pts, e.s.id)); p.setAttribute('marker-end','url(#arr)');
+    p.setAttribute('class','edge'+(e.s.state==='pending'?' dashed':'')+(view.ctx.has(e.t.id)?' ctx':''));
+    svg.appendChild(p); e.el = p;
+  }
 }
 
-// ---- focus / selection
-let selected = null;
+// ---- hover / selection highlighting (within the current view)
 function lineage(id){
   const up=new Set(), down=new Set();
-  const walkUp=i=>byId.get(i).deps.forEach(d=>{ if(!up.has(d)){up.add(d);walkUp(d);} });
-  const walkDown=i=>byId.get(i).children.forEach(c=>{ if(!down.has(c)){down.add(c);walkDown(c);} });
+  const walkUp=i=>view.deps(i).forEach(d=>{ if(!up.has(d)){up.add(d);walkUp(d);} });
+  const walkDown=i=>view.kids(i).forEach(c=>{ if(!down.has(c)){down.add(c);walkDown(c);} });
   walkUp(id); walkDown(id); return {up,down};
 }
-function focusOn(id){
+function highlight(id){
   const {up,down} = lineage(id), all = new Set([id,...up,...down]);
   canvas.classList.add('focus');
   nodes.forEach(n=>n.el.classList.toggle('hl', all.has(n.id)));
@@ -657,10 +784,12 @@ function focusOn(id){
     (all.has(e.s.id) && all.has(e.t.id)) && ((up.has(e.s.id)||e.s.id===id) && (up.has(e.t.id)||e.t.id===id)
      || (down.has(e.t.id) && (down.has(e.s.id)||e.s.id===id)))));
 }
-function clearFocus(){
+function clearHighlight(){
   canvas.classList.remove('focus');
   nodes.forEach(n=>n.el.classList.remove('hl')); edges.forEach(e=>e.el.classList.remove('hl'));
 }
+
+// ---- side panel
 const panel = document.getElementById('panel');
 function rel(id){
   const n = byId.get(id);
@@ -669,12 +798,14 @@ function rel(id){
 }
 function select(id, scroll){
   const n = byId.get(id); if(!n) return;
-  if (selected) byId.get(selected).el.classList.remove('sel');
-  selected = id; n.el.classList.add('sel'); focusOn(id);
-  const pend = pendingDeps(n);
+  if (!view.ids.includes(id)) { focusIds = []; render(); }   // jumping to a hidden card leaves focus
+  if (selected && selected !== id) byId.get(selected).el.classList.remove('sel');
+  selected = id; n.el.classList.add('sel'); highlight(id);
+  const pend = pendingDeps(n), inFocus = focusIds.includes(id);
   panel.innerHTML = `<div class="head"><div><div class="meta">${n.type} · ${n.file}</div>
       <h2>${n.id} — ${esc(n.title)}</h2></div>
-      <button class="x" id="pclose" title="Close" aria-label="Close">✕</button></div>
+      <div class="pbtns"><button id="pfocus" title="${inFocus ? 'Remove this card from the focus' : 'Show only this card and what it depends on (Shift-click to add it to the focus)'}">${inFocus ? 'Unfocus' : '◎ Focus'}</button>
+      <button class="x" id="pclose" title="Close" aria-label="Close">✕</button></div></div>
     <div class="pills"><span class="pill ${n.state}">${esc(n.label)}</span>
       ${pend? `<span class="pill bad">${pend} input${pend>1?'s':''} pending</span>`:''}</div>
     <div class="sec">Depends on (${n.deps.length})</div>
@@ -685,21 +816,83 @@ function select(id, scroll){
   panel.scrollTop = 0;
   panel.classList.add('open'); document.body.classList.add('panel-open');
   document.getElementById('pclose').onclick = ()=>deselect();
+  document.getElementById('pfocus').onclick = e=>{
+    if (focusIds.includes(id)) setFocus(focusIds.filter(f=>f!==id));
+    else focusCard(id, e.shiftKey);
+  };
   if (scroll) n.el.scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
-  try { history.replaceState(null,'','#'+id); } catch(_){}
+  syncHash();
 }
 function deselect(){
   if (selected) byId.get(selected).el.classList.remove('sel');
-  selected=null; panel.classList.remove('open'); document.body.classList.remove('panel-open'); clearFocus();
-  try { history.replaceState(null,'',location.pathname); } catch(_){}
+  selected=null; panel.classList.remove('open'); document.body.classList.remove('panel-open'); clearHighlight();
+  syncHash();
 }
+
+// ---- focus controls
+function setFocus(ids){
+  focusIds = ids.filter((v,i,a)=>byId.has(v) && a.indexOf(v)===i);
+  render();
+  wrap.scrollTo({left:0, top:0});
+  if (selected) select(selected);   // refresh the panel's Focus button
+  syncHash();
+}
+function focusCard(id, add){
+  if (add) setFocus(focusIds.includes(id) ? focusIds.filter(f=>f!==id) : [...focusIds, id]);
+  else setFocus(focusIds.length===1 && focusIds[0]===id ? [] : [id]);
+}
+const fbar = document.getElementById('focusbar');
+function updateFocusBar(){
+  fbar.hidden = !focusIds.length;
+  if (focusIds.length) {
+    document.getElementById('fchips').innerHTML = focusIds.map(id=>
+      `<span class="fchip"><a href="#" data-goto="${id}" title="${esc(byId.get(id).title)}">${id}</a>`
+      + `<button data-unfocus="${id}" title="Remove from focus" aria-label="Remove ${id} from focus">✕</button></span>`).join('');
+    const c = view.ctx.size;
+    document.getElementById('fcount').textContent =
+      `${view.core} of ${nodes.length} cards` + (c ? ` + ${c} direct user${c>1?'s':''} (faded)` : '');
+    document.getElementById('unsettled').checked = unsettledOnly;
+  }
+  setH();
+}
+fbar.addEventListener('click', e=>{
+  const u = e.target.closest('[data-unfocus]');
+  if (u) { e.stopPropagation(); setFocus(focusIds.filter(f=>f!==u.dataset.unfocus)); }
+});
+document.getElementById('unsettled').addEventListener('change', e=>{ unsettledOnly = e.target.checked; setFocus(focusIds); });
+document.getElementById('fexit').addEventListener('click', ()=>setFocus([]));
+// "Add a card…": type an ID or part of a title; picking a suggestion adds that card to the focus.
+document.getElementById('fadd-list').innerHTML =
+  nodes.map(n=>`<option value="${n.id} — ${esc(n.title)}"></option>`).join('');
+const fadd = document.getElementById('fadd');
+fadd.addEventListener('change', ()=>{
+  const id = (fadd.value.match(/^\s*([A-Z]+-\d{3})/i) || [])[1];
+  fadd.value = '';
+  if (id && byId.has(id.toUpperCase()) && !focusIds.includes(id.toUpperCase())) setFocus([...focusIds, id.toUpperCase()]);
+});
+
+// ---- address: #focus=ID,ID&only=unsettled&card=ID survives reloads and rebuilds
+function syncHash(){
+  const p = new URLSearchParams();
+  if (focusIds.length) p.set('focus', focusIds.join(','));
+  if (focusIds.length && unsettledOnly) p.set('only', 'unsettled');
+  if (selected) p.set('card', selected);
+  const h = p.toString().replace(/%2C/g, ',');
+  try { history.replaceState(null, '', h ? '#'+h : location.pathname + location.search); } catch(_){}
+}
+
 document.addEventListener('click', e=>{
   const g = e.target.closest('[data-goto]');
   if (g){ e.preventDefault(); select(g.dataset.goto, true); return; }
+  // A control that re-rendered itself (e.g. the panel's Focus button) is no longer in the page.
+  if (!e.target.isConnected) return;
   // Anything that is not a card or the panel closes the panel.
   if (!e.target.closest('#panel') && !e.target.closest('.card')) deselect();
 });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') deselect(); });
+document.addEventListener('keydown', e=>{
+  if (e.key !== 'Escape') return;
+  if (selected) deselect(); else if (focusIds.length) setFocus([]);
+});
 
 // ---- search
 document.getElementById('q').addEventListener('input', e=>{
@@ -713,7 +906,6 @@ const sb = document.getElementById('statusbox');
 sb.innerHTML = '<button class="close" id="sclose">✕</button>' + (DATA.status || '<p>No status section in README.md.</p>');
 document.getElementById('statusbtn').onclick = ()=>sb.classList.toggle('open');
 document.getElementById('sclose').onclick = ()=>sb.classList.remove('open');
-const root = document.documentElement;
 function setMode(mode){
   if (mode === 'light' || mode === 'dark') root.dataset.theme = mode; else { delete root.dataset.theme; mode = 'system'; }
   document.querySelectorAll('#theme button').forEach(b=>b.classList.toggle('on', b.dataset.mode===mode));
@@ -724,8 +916,23 @@ try { savedMode = localStorage.getItem('rp-theme') || 'system'; } catch(_){}
 setMode(savedMode);
 document.querySelectorAll('#theme button').forEach(b=>b.addEventListener('click', ()=>setMode(b.dataset.mode)));
 const hdr = document.querySelector('header');
-const setH = ()=>root.style.setProperty('--hdr', hdr.offsetHeight+'px'); setH(); addEventListener('resize', setH);
-if (location.hash && byId.has(location.hash.slice(1))) select(location.hash.slice(1), true);
+function setH(){ root.style.setProperty('--hdr', hdr.offsetHeight+'px'); }
+addEventListener('resize', setH);
+
+// ---- start: restore focus and selection from the address
+(function init(){
+  const h = location.hash.slice(1);
+  let card = null;
+  if (byId.has(h)) card = h;   // older links: #ID
+  else {
+    const p = new URLSearchParams(h);
+    focusIds = (p.get('focus')||'').split(',').filter(id=>byId.has(id));
+    unsettledOnly = p.get('only') === 'unsettled';
+    card = p.get('card');
+  }
+  render();
+  if (card && byId.has(card)) select(card, true);
+})();
 </script>
 </body>
 </html>

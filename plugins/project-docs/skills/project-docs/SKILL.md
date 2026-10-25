@@ -127,11 +127,17 @@ Before writing entries, read `references/conventions.md` for the formats, good e
   - Clicking another card replaces the panel's contents. Clicking anything that is not a card or the panel closes it, as do the panel's ✕ and Escape.
   - The open panel casts a shadow on its left edge, stronger in dark mode, and the graph gains extra scroll room equal to the panel's width, so any card the panel covers can be scrolled clear.
   - The header has summary counts, a legend, a search box, a Status button that shows the README's Status section, and a System / Light / Dark switch stored in localStorage.
+- **Focus mode:**
+  - Focusing a card shows only that card, everything it depends on (all the way down), and its direct users faded as context. The layout is recomputed for just those cards, in the page, with the same algorithm.
+  - Controls: a ◎ icon on card hover; a Focus / Unfocus button in the panel; and a focus bar under the header with removable chips, an "Add a card…" box (cards hidden by the current focus can't be shift-clicked), an "Unsettled only" switch, and Exit. "Unsettled only" hides settled inputs and joins the arrows across them.
+  - Shift-click ◎ adds a card to the focus, and the view is the union of the chains.
+  - The focus lives in the address (`#focus=ID,ID&only=unsettled&card=ID`), so it survives reloads and rebuilds.
+  - Esc closes the panel first, then exits focus. Opening a card that isn't in view leaves focus.
 - **Title:** `<README heading> Map` by default, or `--title`.
 
 ### Checking it
 
-After building, open the page in a headless browser if one is available (Playwright with Chromium). Confirm there are no page errors and that the card count matches the build output. When the builder itself changed, also check: click a card (panel opens), click another (panel replaced), click empty space and the header (closed), the ✕ (closed), a related item in the panel (jumps), and all three color modes. Look at a full-page screenshot for overlapping or ambiguous lines.
+After building, open the page in a headless browser if one is available (Playwright with Chromium). Confirm there are no page errors and that the card count matches the build output. When the builder itself changed, also check: click a card (panel opens), click another (panel replaced), click empty space and the header (closed), the ✕ (closed), a related item in the panel (jumps), and all three color modes. For focus: ◎ (focus and toggle off), Shift-◎ and "Add a card…" (union), Unsettled only, removing a chip, the panel's Focus button (the panel stays open), reload (focus restored), and Esc twice. Look at a full-page screenshot for overlapping or ambiguous lines.
 
 ## Why these choices
 
