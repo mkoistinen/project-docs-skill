@@ -79,3 +79,7 @@ plugins/project-docs/
     scripts/                               scaffold, checker, symbol linker, dashboard builder
 images/                                    README screenshot (synthetic demo data)
 ```
+
+## License
+
+MIT. See [LICENSE](LICENSE).
