@@ -26,7 +26,8 @@ Every entry has a permanent ID (`GOAL-001`, `DEC-007`, `EXP-003`, `FND-012`, `OP
   - Each entry is a card, placed left to right by dependency depth (foundations on the left, goals on the right), and colored by status.
   - Cards are joined by orthogonal arrows drawn from each entry's `- **Depends on:**` line. Arrows from the same card share a path until they diverge, paths favor the middle of each gap, and crossings get small hops.
   - Hovering a card highlights its lineage, and hovering a line highlights and labels that connection. Clicking one opens a side panel with the full entry and its dependencies.
-  - **Focus mode** shows just one or more cards, everything they depend on, and their direct users. Click ◎ on a card, or Shift-click ◎ on several to pick them and then focus on all of them, with an optional "Unsettled only" filter. The focus is kept in the URL.
+  - **Focus mode** shows just one or more cards, everything they depend on, and their direct users. Click ◎ on a card, or Shift-click ◎ on several to pick them and then focus on all of them. The focus is kept in the URL.
+  - **Unsettled only** hides every settled card, in the full map or inside a focus, and joins the arrows across them.
   - **Due dates.** An entry with a `- **Due:** YYYY-MM-DD · why` line shows its date on the card, tinted red within 30 days, orange within 60 and amber within 90. A "Due soon" button focuses on everything due within 90 days.
   - It has search, a status overlay, and System / Light / Dark themes.
 - **Obsidian-friendly Markdown.** Each entry is an `<a id>` anchor followed by a heading that is exactly the ID, so links work on GitHub, in VS Code, in MkDocs and in Obsidian.

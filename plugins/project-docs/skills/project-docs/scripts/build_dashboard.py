@@ -509,6 +509,7 @@ path.edge.pend.hl{stroke:var(--edge-hl);stroke-opacity:1}
   </div>
   <div class="tools">
     <input type="search" id="q" placeholder="Search cards…">
+    <label class="ftoggle" title="Hide settled cards (done, verified, superseded) and join the arrows across them"><input type="checkbox" id="unsettled"> Unsettled only<span id="ucount" class="muted"></span></label>
     <button id="duebtn" hidden title="Focus on unsettled cards due within 90 days"></button>
     <button id="statusbtn">Status</button>
     <div class="seg" id="theme" role="group" aria-label="Color scheme">
@@ -523,7 +524,6 @@ path.edge.pend.hl{stroke:var(--edge-hl);stroke-opacity:1}
       <span class="muted">Shift-click ◎ on more cards to pick them</span>
     </span>
     <span class="fgroup" id="fonctl">
-      <label class="ftoggle"><input type="checkbox" id="unsettled"> Unsettled only</label>
       <input id="fadd" list="fadd-list" placeholder="Add a card…" aria-label="Add a card to the focus">
       <datalist id="fadd-list"></datalist>
       <button id="fexit">Exit focus (Esc)</button>
@@ -638,16 +638,20 @@ function layout(ids, depsOf, kidsOf){
 // users faded as context. "Unsettled only" hides settled inputs and joins the arrows across them.
 let focusIds = [], unsettledOnly = false, selected = null, view = null, edges = [];
 function computeView(){
-  if (!focusIds.length) {
+  if (!focusIds.length && !unsettledOnly) {
     return {ids: nodes.map(n=>n.id), deps: id=>byId.get(id).deps, ctx: new Set(), roots: new Set(), core: nodes.length};
   }
-  const roots = new Set(focusIds), up = new Set();
-  const walk = i => byId.get(i).deps.forEach(d=>{ if (!up.has(d)) { up.add(d); walk(d); } });
-  focusIds.forEach(walk);
-  const core = new Set(focusIds);
-  up.forEach(a=>{ if (!roots.has(a) && !(unsettledOnly && isSettled(byId.get(a)))) core.add(a); });
-  const ctx = new Set();
-  focusIds.forEach(r=>byId.get(r).children.forEach(c=>{ if (!core.has(c)) ctx.add(c); }));
+  const roots = new Set(focusIds), core = new Set(focusIds), ctx = new Set();
+  if (focusIds.length) {
+    const up = new Set();
+    const walk = i => byId.get(i).deps.forEach(d=>{ if (!up.has(d)) { up.add(d); walk(d); } });
+    focusIds.forEach(walk);
+    up.forEach(a=>{ if (!roots.has(a) && !(unsettledOnly && isSettled(byId.get(a)))) core.add(a); });
+    focusIds.forEach(r=>byId.get(r).children.forEach(c=>{ if (!core.has(c)) ctx.add(c); }));
+  } else {
+    // Full map with "Unsettled only": every unsettled card; arrows join across the hidden ones.
+    nodes.forEach(n=>{ if (!isSettled(n)) core.add(n.id); });
+  }
   const memo = new Map();
   const deps = id => {
     if (ctx.has(id)) return byId.get(id).deps.filter(d=>roots.has(d));
@@ -890,7 +894,10 @@ function rel(id){
 }
 function select(id, scroll){
   const n = byId.get(id); if(!n) return;
-  if (!view.ids.includes(id)) { focusIds = []; render(); }   // jumping to a hidden card leaves focus
+  if (!view.ids.includes(id)) {   // jumping to a hidden card leaves focus, then "Unsettled only"
+    focusIds = []; render();
+    if (!view.ids.includes(id)) { unsettledOnly = false; document.getElementById('unsettled').checked = false; render(); }
+  }
   if (selected && selected !== id) byId.get(selected).el.classList.remove('sel');
   selected = id; n.el.classList.add('sel'); highlight(id);
   const pend = pendingDeps(n), inFocus = focusIds.includes(id), isPicked = picked.includes(id);
@@ -975,8 +982,9 @@ function updateFocusBar(){
     const c = view.ctx.size;
     document.getElementById('fcount').textContent =
       `${view.core} of ${nodes.length} cards` + (c ? ` + ${c} direct user${c>1?'s':''} (faded)` : '');
-    document.getElementById('unsettled').checked = unsettledOnly;
   }
+  document.getElementById('unsettled').checked = unsettledOnly;
+  document.getElementById('ucount').textContent = unsettledOnly && !focusIds.length ? ` (${view.core} of ${nodes.length})` : '';
   setH();
 }
 fbar.addEventListener('click', e=>{
@@ -1003,7 +1011,7 @@ fadd.addEventListener('change', ()=>{
 function syncHash(){
   const p = new URLSearchParams();
   if (focusIds.length) p.set('focus', focusIds.join(','));
-  if (focusIds.length && unsettledOnly) p.set('only', 'unsettled');
+  if (unsettledOnly) p.set('only', 'unsettled');
   if (selected) p.set('card', selected);
   const h = p.toString().replace(/%2C/g, ',');
   try { history.replaceState(null, '', h ? '#'+h : location.pathname + location.search); } catch(_){}
