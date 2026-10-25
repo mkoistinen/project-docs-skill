@@ -474,6 +474,10 @@ path.edge.pend.hl{stroke:var(--edge-hl);stroke-opacity:1}
 .card.picked{box-shadow:0 0 0 1px var(--pending)}
 .card.picked .fbtn{display:block;background:var(--pending);color:#111}
 .card.picked .type{visibility:hidden}
+#etip{position:fixed;z-index:20;pointer-events:none;display:none;background:var(--panel);color:var(--text);
+  border:1px solid var(--line);border-radius:6px;padding:4px 8px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace;
+  box-shadow:0 2px 8px rgba(0,0,0,.25);max-width:420px}
+#etip div+div{margin-top:2px}
 #statusbox{display:none;position:fixed;left:16px;bottom:16px;width:min(520px,calc(100% - 32px));max-height:60%;
   overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;z-index:9}
 #statusbox.open{display:block}
@@ -803,6 +807,45 @@ function clearHighlight(){
   canvas.classList.remove('focus');
   nodes.forEach(n=>n.el.classList.remove('hl')); edges.forEach(e=>e.el.classList.remove('hl'));
 }
+
+// ---- hovering a line highlights that connection (all lines under the pointer, so a shared
+// trunk lights every branch that runs along it) and labels it next to the cursor.
+const etip = document.createElement('div'); etip.id = 'etip'; document.body.appendChild(etip);
+let edgeHover = false;
+function edgesAt(x, y){
+  const M = 5;   // pointer tolerance in px; every segment is horizontal or vertical
+  return edges.filter(e=>{
+    for (let i=0; i<e.pts.length-1; i++) {
+      const a = e.pts[i], b = e.pts[i+1];
+      if (x >= Math.min(a[0],b[0])-M && x <= Math.max(a[0],b[0])+M &&
+          y >= Math.min(a[1],b[1])-M && y <= Math.max(a[1],b[1])+M) return true;
+    }
+    return false;
+  });
+}
+function endEdgeHover(){
+  if (!edgeHover) return;
+  edgeHover = false; etip.style.display = 'none'; canvas.style.cursor = '';
+  if (!selected) clearHighlight();
+}
+wrap.addEventListener('mousemove', e=>{
+  if (selected || e.target.closest('.card')) { endEdgeHover(); return; }
+  const r = canvas.getBoundingClientRect();
+  const hits = edgesAt(e.clientX - r.left, e.clientY - r.top);
+  if (!hits.length) { endEdgeHover(); return; }
+  edgeHover = true;
+  const ends = new Set(hits.flatMap(h=>[h.s.id, h.t.id])), hit = new Set(hits);
+  canvas.classList.add('focus');
+  nodes.forEach(n=>n.el.classList.toggle('hl', ends.has(n.id)));
+  edges.forEach(x=>x.el.classList.toggle('hl', hit.has(x)));
+  const bySrc = new Map();
+  hits.forEach(h=>{ if (!bySrc.has(h.s.id)) bySrc.set(h.s.id, []); bySrc.get(h.s.id).push(h.t.id); });
+  etip.innerHTML = [...bySrc].map(([s,ts])=>`<div>${s} → ${ts.join(', ')}</div>`).join('');
+  etip.style.display = 'block';
+  const x = Math.min(e.clientX + 14, innerWidth - etip.offsetWidth - 8);
+  etip.style.left = x+'px'; etip.style.top = (e.clientY + 14)+'px';
+});
+wrap.addEventListener('mouseleave', endEdgeHover);
 
 // ---- side panel
 const panel = document.getElementById('panel');

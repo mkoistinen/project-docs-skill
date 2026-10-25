@@ -123,6 +123,7 @@ Before writing entries, read `references/conventions.md` for the formats, good e
   - Arrows from unsettled cards are faint amber, and the rest are grey. No dashed lines: they break up shared trunks and hops.
 - **Interaction:**
   - Hovering a card highlights its upstream and downstream lineage and dims the rest.
+  - Hovering a line highlights that connection: the line, and the two cards it joins. Every line within 5 px of the pointer counts, so a shared trunk lights all the branches that run along it. A label by the cursor reads `SRC → TGT, TGT`.
   - Clicking a card opens a panel on the right, below the header, with the type and file, status pills, "Depends on (n)" and "Used by (n)" lists (ID, title, status, each clickable), and the full entry rendered from Markdown.
   - Clicking another card replaces the panel's contents. Clicking anything that is not a card or the panel closes it, as do the panel's ✕ and Escape.
   - The open panel casts a shadow on its left edge, stronger in dark mode, and the graph gains extra scroll room equal to the panel's width, so any card the panel covers can be scrolled clear.
@@ -137,7 +138,7 @@ Before writing entries, read `references/conventions.md` for the formats, good e
 
 ### Checking it
 
-After building, open the page in a headless browser if one is available (Playwright with Chromium). Confirm there are no page errors and that the card count matches the build output. When the builder itself changed, also check: click a card (panel opens), click another (panel replaced), click empty space and the header (closed), the ✕ (closed), a related item in the panel (jumps), and all three color modes. For focus: ◎ (focus and toggle off), Shift-◎ picking in the full map then Focus (union), "Add a card…", Unsettled only, removing a chip, the panel's Focus button (the panel stays open), reload (focus restored), and Esc twice. Look at a full-page screenshot for overlapping or ambiguous lines.
+After building, open the page in a headless browser if one is available (Playwright with Chromium). Confirm there are no page errors and that the card count matches the build output. When the builder itself changed, also check: click a card (panel opens), click another (panel replaced), click empty space and the header (closed), the ✕ (closed), a related item in the panel (jumps), all three color modes, and hovering a single line and a shared trunk. For focus: ◎ (focus and toggle off), Shift-◎ picking in the full map then Focus (union), "Add a card…", Unsettled only, removing a chip, the panel's Focus button (the panel stays open), reload (focus restored), and Esc twice. Look at a full-page screenshot for overlapping or ambiguous lines.
 
 ## Why these choices
 
