@@ -120,7 +120,7 @@ Before writing entries, read `references/conventions.md` for the formats, good e
   - Paths favor the middle of the gap between columns, or of the space between rows, and build outward from there (center, +1, -1, +2, -2 …). The longest trunks claim the middle first.
   - An arrow that must cross a column runs through the space between rows, reusing its source's existing channel where possible.
   - A horizontal run that crosses another source's vertical run draws a small hop.
-  - Dashed arrows mean the source isn't settled yet.
+  - Arrows from unsettled cards are faint amber, and the rest are grey. No dashed lines: they break up shared trunks and hops.
 - **Interaction:**
   - Hovering a card highlights its upstream and downstream lineage and dims the rest.
   - Clicking a card opens a panel on the right, below the header, with the type and file, status pills, "Depends on (n)" and "Used by (n)" lists (ID, title, status, each clickable), and the full entry rendered from Markdown.
@@ -129,15 +129,15 @@ Before writing entries, read `references/conventions.md` for the formats, good e
   - The header has summary counts, a legend, a search box, a Status button that shows the README's Status section, and a System / Light / Dark switch stored in localStorage.
 - **Focus mode:**
   - Focusing a card shows only that card, everything it depends on (all the way down), and its direct users faded as context. The layout is recomputed for just those cards, in the page, with the same algorithm.
-  - Controls: a ◎ icon on card hover; a Focus / Unfocus button in the panel; and a focus bar under the header with removable chips, an "Add a card…" box (cards hidden by the current focus can't be shift-clicked), an "Unsettled only" switch, and Exit. "Unsettled only" hides settled inputs and joins the arrows across them.
-  - Shift-click ◎ adds a card to the focus, and the view is the union of the chains.
+  - Controls: a ◎ icon on card hover; a Focus / Unfocus button in the panel; and a focus bar under the header with removable chips, an "Add a card…" box, an "Unsettled only" switch, and Exit. "Unsettled only" hides settled inputs and joins the arrows across them.
+  - Several cards: in the full map, Shift-click ◎ *picks* cards without filtering anything (amber ◎, and a "Picked" bar with Focus on N cards / Clear). Then "Focus on N cards" or a plain ◎ shows the union of their chains. Picking comes first because, once one card is focused, the visible cards are already in its chain and the rest are hidden. Inside a focus, Shift-click ◎ adds a visible card (useful on the faded direct users), and "Add a card…" adds any card.
   - The focus lives in the address (`#focus=ID,ID&only=unsettled&card=ID`), so it survives reloads and rebuilds.
-  - Esc closes the panel first, then exits focus. Opening a card that isn't in view leaves focus.
+  - Esc closes the panel first, then exits focus, then clears picks. Opening a card that isn't in view leaves focus.
 - **Title:** `<README heading> Map` by default, or `--title`.
 
 ### Checking it
 
-After building, open the page in a headless browser if one is available (Playwright with Chromium). Confirm there are no page errors and that the card count matches the build output. When the builder itself changed, also check: click a card (panel opens), click another (panel replaced), click empty space and the header (closed), the ✕ (closed), a related item in the panel (jumps), and all three color modes. For focus: ◎ (focus and toggle off), Shift-◎ and "Add a card…" (union), Unsettled only, removing a chip, the panel's Focus button (the panel stays open), reload (focus restored), and Esc twice. Look at a full-page screenshot for overlapping or ambiguous lines.
+After building, open the page in a headless browser if one is available (Playwright with Chromium). Confirm there are no page errors and that the card count matches the build output. When the builder itself changed, also check: click a card (panel opens), click another (panel replaced), click empty space and the header (closed), the ✕ (closed), a related item in the panel (jumps), and all three color modes. For focus: ◎ (focus and toggle off), Shift-◎ picking in the full map then Focus (union), "Add a card…", Unsettled only, removing a chip, the panel's Focus button (the panel stays open), reload (focus restored), and Esc twice. Look at a full-page screenshot for overlapping or ambiguous lines.
 
 ## Why these choices
 

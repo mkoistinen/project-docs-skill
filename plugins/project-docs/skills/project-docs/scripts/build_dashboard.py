@@ -395,7 +395,7 @@ svg{position:absolute;left:0;top:0;overflow:visible}
 .pill::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;
   margin-right:5px;vertical-align:1px}
 path.edge{fill:none;stroke:var(--edge);stroke-width:1.3}
-path.edge.dashed{stroke-dasharray:4 4}
+path.edge.pend{stroke:var(--pending);stroke-opacity:.6}
 #canvas.focus .card:not(.hl){opacity:.22}
 #canvas.focus path.edge:not(.hl){opacity:.12}
 path.edge.hl{stroke:var(--edge-hl);stroke-width:2}
@@ -455,6 +455,7 @@ path.edge.ctx{opacity:.5}
 #focusbar[hidden]{display:none}
 #focusbar .flabel{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 #fchips{display:inline-flex;gap:6px;flex-wrap:wrap}
+.fchip.picked{border-left-color:var(--pending)}
 .fchip{display:inline-flex;align-items:center;gap:2px;background:var(--chip);border-left:3px solid var(--edge-hl);
   border-radius:5px;padding:2px 2px 2px 7px;font:600 12px ui-monospace,Menlo,monospace}
 .fchip a{color:var(--text);text-decoration:none}
@@ -464,6 +465,15 @@ path.edge.ctx{opacity:.5}
 .ftoggle{display:inline-flex;gap:5px;align-items:center;cursor:pointer}
 .muted{color:var(--muted)}
 #panel .pbtns{display:flex;gap:6px;align-items:center}
+#panel .pbtns button{white-space:nowrap}
+.lswatch{display:inline-block;width:16px;height:2px;background:var(--pending);opacity:.7;vertical-align:3px;margin-right:5px}
+path.edge.pend.hl{stroke:var(--edge-hl);stroke-opacity:1}
+.fgroup{display:inline-flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.fgroup[hidden]{display:none}
+#fgo{background:var(--edge-hl);border-color:var(--edge-hl);color:#fff;font-weight:600}
+.card.picked{box-shadow:0 0 0 1px var(--pending)}
+.card.picked .fbtn{display:block;background:var(--pending);color:#111}
+.card.picked .type{visibility:hidden}
 #statusbox{display:none;position:fixed;left:16px;bottom:16px;width:min(520px,calc(100% - 32px));max-height:60%;
   overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;z-index:9}
 #statusbox.open{display:block}
@@ -478,7 +488,7 @@ path.edge.ctx{opacity:.5}
     <span><span class="dot" style="background:var(--done)"></span>done / verified</span>
     <span><span class="dot" style="background:var(--pending)"></span>waiting / inferred</span>
     <span><span class="dot" style="background:var(--neutral)"></span>goal / requirement</span>
-    <span>dashed arrow = input not settled</span>
+    <span><span class="lswatch"></span>amber arrow = from an unsettled card</span>
   </div>
   <div class="tools">
     <input type="search" id="q" placeholder="Search cards…">
@@ -488,13 +498,18 @@ path.edge.ctx{opacity:.5}
     </div>
   </div>
   <div id="focusbar" hidden>
-    <span class="flabel">Focus</span><span id="fchips"></span>
+    <span class="flabel" id="flabel">Focus</span><span id="fchips"></span>
     <span id="fcount" class="muted"></span>
-    <label class="ftoggle"><input type="checkbox" id="unsettled"> Unsettled only</label>
-    <input id="fadd" list="fadd-list" placeholder="Add a card…" aria-label="Add a card to the focus">
-    <datalist id="fadd-list"></datalist>
-    <span class="muted">or Shift-click ◎</span>
-    <button id="fexit">Exit focus (Esc)</button>
+    <span class="fgroup" id="fpickctl">
+      <button id="fgo">Focus</button><button id="fclear">Clear</button>
+      <span class="muted">Shift-click ◎ on more cards to pick them</span>
+    </span>
+    <span class="fgroup" id="fonctl">
+      <label class="ftoggle"><input type="checkbox" id="unsettled"> Unsettled only</label>
+      <input id="fadd" list="fadd-list" placeholder="Add a card…" aria-label="Add a card to the focus">
+      <datalist id="fadd-list"></datalist>
+      <button id="fexit">Exit focus (Esc)</button>
+    </span>
   </div>
 </header>
 <div id="wrap"><div id="canvas"><svg id="edges"></svg></div></div>
@@ -537,13 +552,13 @@ for (const n of nodes) {
     extra = `<span class="pill bad">${p} input${p>1?'s':''} pending</span>`;
   }
   el.innerHTML = `<div class="top"><span class="id">${n.id}</span><span class="type">${n.type}</span></div>
-    <button class="fbtn" title="Focus on this card (Shift-click to add it to the focus)" aria-label="Focus on ${n.id}">◎</button>
+    <button class="fbtn" title="Focus on this card. Shift-click to pick several cards and focus on them together." aria-label="Focus on ${n.id}">◎</button>
     <div class="title" title="${esc(n.title)}">${esc(n.title)}</div>
     <div class="pills"><span class="pill ${n.state}" title="${esc(n.label)}">${esc(n.label.replace(/ \(.*\)$/, n.label.length>22?' *':'$&'))}</span>${extra}</div>`;
   el.addEventListener('mouseenter',()=>{ if(!selected) highlight(n.id); });
   el.addEventListener('mouseleave',()=>{ if(!selected) clearHighlight(); });
   el.addEventListener('click',e=>{ e.stopPropagation(); select(n.id); });
-  el.querySelector('.fbtn').addEventListener('click', e=>{ e.stopPropagation(); focusCard(n.id, e.shiftKey); });
+  el.querySelector('.fbtn').addEventListener('click', e=>{ e.stopPropagation(); focusButton(n.id, e.shiftKey); });
   canvas.appendChild(el); n.el = el;
 }
 
@@ -764,7 +779,7 @@ function route(cols, maxRows){
   for (const e of edges) {
     const p = document.createElementNS(NS,'path');
     p.setAttribute('d', pathD(e.pts, e.s.id)); p.setAttribute('marker-end','url(#arr)');
-    p.setAttribute('class','edge'+(e.s.state==='pending'?' dashed':'')+(view.ctx.has(e.t.id)?' ctx':''));
+    p.setAttribute('class','edge'+(e.s.state==='pending'?' pend':'')+(view.ctx.has(e.t.id)?' ctx':''));
     svg.appendChild(p); e.el = p;
   }
 }
@@ -801,10 +816,14 @@ function select(id, scroll){
   if (!view.ids.includes(id)) { focusIds = []; render(); }   // jumping to a hidden card leaves focus
   if (selected && selected !== id) byId.get(selected).el.classList.remove('sel');
   selected = id; n.el.classList.add('sel'); highlight(id);
-  const pend = pendingDeps(n), inFocus = focusIds.includes(id);
+  const pend = pendingDeps(n), inFocus = focusIds.includes(id), isPicked = picked.includes(id);
+  const fLabel = inFocus ? 'Unfocus' : (!focusIds.length && picked.length ? (isPicked ? '◎ Focus on picked' : '◎ Focus with picked') : '◎ Focus');
+  const fTitle = inFocus ? 'Remove this card from the focus'
+    : focusIds.length ? 'Show only this card and what it depends on (Shift-click to add it to the focus)'
+    : 'Show only this card and what it depends on (Shift-click to pick it, to focus on several cards together)';
   panel.innerHTML = `<div class="head"><div><div class="meta">${n.type} · ${n.file}</div>
       <h2>${n.id} — ${esc(n.title)}</h2></div>
-      <div class="pbtns"><button id="pfocus" title="${inFocus ? 'Remove this card from the focus' : 'Show only this card and what it depends on (Shift-click to add it to the focus)'}">${inFocus ? 'Unfocus' : '◎ Focus'}</button>
+      <div class="pbtns"><button id="pfocus" title="${fTitle}">${fLabel}</button>
       <button class="x" id="pclose" title="Close" aria-label="Close">✕</button></div></div>
     <div class="pills"><span class="pill ${n.state}">${esc(n.label)}</span>
       ${pend? `<span class="pill bad">${pend} input${pend>1?'s':''} pending</span>`:''}</div>
@@ -818,7 +837,7 @@ function select(id, scroll){
   document.getElementById('pclose').onclick = ()=>deselect();
   document.getElementById('pfocus').onclick = e=>{
     if (focusIds.includes(id)) setFocus(focusIds.filter(f=>f!==id));
-    else focusCard(id, e.shiftKey);
+    else focusButton(id, e.shiftKey);
   };
   if (scroll) n.el.scrollIntoView({behavior:'smooth', block:'center', inline:'center'});
   syncHash();
@@ -830,7 +849,23 @@ function deselect(){
 }
 
 // ---- focus controls
+// Picking: in the full map, Shift-click ◎ picks cards without filtering anything, so several can
+// be chosen; "Focus" (or a plain ◎) then shows all their chains together. Inside a focus,
+// Shift-click ◎ adds a visible card (useful on the faded direct users) and "Add a card…" adds any card.
+let picked = [];
+function setPicked(ids){
+  picked = ids;
+  nodes.forEach(n=>n.el.classList.toggle('picked', picked.includes(n.id)));
+  updateFocusBar();
+  if (selected) select(selected);   // refresh the panel's Focus button
+}
+function focusButton(id, shift){
+  if (focusIds.length) return focusCard(id, shift);
+  if (shift) return setPicked(picked.includes(id) ? picked.filter(p=>p!==id) : [...picked, id]);
+  setFocus(picked.includes(id) ? picked : [...picked, id]);
+}
 function setFocus(ids){
+  if (picked.length) { picked = []; nodes.forEach(n=>n.el.classList.remove('picked')); }
   focusIds = ids.filter((v,i,a)=>byId.has(v) && a.indexOf(v)===i);
   render();
   wrap.scrollTo({left:0, top:0});
@@ -843,7 +878,18 @@ function focusCard(id, add){
 }
 const fbar = document.getElementById('focusbar');
 function updateFocusBar(){
-  fbar.hidden = !focusIds.length;
+  const picking = !focusIds.length && picked.length > 0;
+  fbar.hidden = !focusIds.length && !picking;
+  document.getElementById('fpickctl').hidden = !picking;
+  document.getElementById('fonctl').hidden = !focusIds.length;
+  document.getElementById('flabel').textContent = picking ? 'Picked' : 'Focus';
+  if (picking) {
+    document.getElementById('fchips').innerHTML = picked.map(id=>
+      `<span class="fchip picked"><a href="#" data-goto="${id}" title="${esc(byId.get(id).title)}">${id}</a>`
+      + `<button data-unpick="${id}" title="Unpick" aria-label="Unpick ${id}">✕</button></span>`).join('');
+    document.getElementById('fcount').textContent = '';
+    document.getElementById('fgo').textContent = `Focus on ${picked.length} card${picked.length>1?'s':''}`;
+  }
   if (focusIds.length) {
     document.getElementById('fchips').innerHTML = focusIds.map(id=>
       `<span class="fchip"><a href="#" data-goto="${id}" title="${esc(byId.get(id).title)}">${id}</a>`
@@ -858,7 +904,11 @@ function updateFocusBar(){
 fbar.addEventListener('click', e=>{
   const u = e.target.closest('[data-unfocus]');
   if (u) { e.stopPropagation(); setFocus(focusIds.filter(f=>f!==u.dataset.unfocus)); }
+  const k = e.target.closest('[data-unpick]');
+  if (k) { e.stopPropagation(); setPicked(picked.filter(p=>p!==k.dataset.unpick)); }
 });
+document.getElementById('fgo').addEventListener('click', ()=>setFocus(picked));
+document.getElementById('fclear').addEventListener('click', ()=>setPicked([]));
 document.getElementById('unsettled').addEventListener('change', e=>{ unsettledOnly = e.target.checked; setFocus(focusIds); });
 document.getElementById('fexit').addEventListener('click', ()=>setFocus([]));
 // "Add a card…": type an ID or part of a title; picking a suggestion adds that card to the focus.
@@ -891,7 +941,7 @@ document.addEventListener('click', e=>{
 });
 document.addEventListener('keydown', e=>{
   if (e.key !== 'Escape') return;
-  if (selected) deselect(); else if (focusIds.length) setFocus([]);
+  if (selected) deselect(); else if (focusIds.length) setFocus([]); else if (picked.length) setPicked([]);
 });
 
 // ---- search
