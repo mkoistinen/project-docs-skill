@@ -131,7 +131,7 @@ An entry with a deadline gets `- **Due:** YYYY-MM-DD · why` straight after its 
   - Clicking a card opens a panel on the right, below the header, with the type and file, status pills, "Depends on (n)" and "Used by (n)" lists (ID, title, status, each clickable), and the full entry rendered from Markdown.
   - Clicking another card replaces the panel's contents. Clicking anything that is not a card or the panel closes it, as do the panel's ✕ and Escape.
   - The open panel casts a shadow on its left edge, stronger in dark mode, and the graph gains extra scroll room equal to the panel's width, so any card the panel covers can be scrolled clear.
-  - The header has summary counts, a legend, a search box, a Status button that shows the README's Status section, and a System / Light / Dark switch stored in localStorage.
+  - The header has summary counts (total cards, then each group's total with its breakdown, so new entries show at a glance), a legend, a search box, a Status button that shows the README's Status section, and a System / Light / Dark switch stored in localStorage.
 - **Focus mode:**
   - Focusing a card shows only that card, everything it depends on (all the way down), and its direct users faded as context. The layout is recomputed for just those cards, in the page, with the same algorithm.
   - Controls: a ◎ icon on card hover; a Focus / Unfocus button in the panel; and a focus bar under the header with removable chips, an "Add a card…" box, an "Unsettled only" switch, and Exit. "Unsettled only" hides settled inputs and joins the arrows across them.

@@ -547,13 +547,15 @@ const isSettled = n => n.state==='done' || n.state==='muted';
 
 // ---- stats
 const count = (p, st) => nodes.filter(n=>n.prefix===p && (!st || n.state===st)).length;
+// Each group shows its total first, so a glance shows whether anything was added since last time.
 const stats = [
-  ['Open items', `${count('OPEN','pending')} waiting · ${count('OPEN','done')} resolved`],
-  ['Findings', `${count('FND','done')} verified · ${count('FND','pending')} inferred/partly`],
-  ['Questions', `${count('Q')} unanswered`],
-  ['Decisions', `${count('DEC','done')} active · ${count('DEC','pending')} proposed`],
+  ['Open items', `${count('OPEN')}`, `${count('OPEN','pending')} waiting · ${count('OPEN','done')} resolved`],
+  ['Findings', `${count('FND')}`, `${count('FND','done')} verified · ${count('FND','pending')} inferred/partly`],
+  ['Questions', `${count('Q')}`, `${count('Q','pending')} unanswered`],
+  ['Decisions', `${count('DEC')}`, `${count('DEC','done')} active · ${count('DEC','pending')} proposed`],
 ];
-document.getElementById('stats').innerHTML = stats.map(([k,v])=>`<span>${k}: <b>${v}</b></span>`).join('')
+document.getElementById('stats').innerHTML = `<span>Cards: <b>${nodes.length}</b></span>`
+  + stats.map(([k,t,v])=>`<span>${k}: <b>${t}</b> (${v})</span>`).join('')
   + `<span>Built ${esc(DATA.built)}</span>`;
 
 // ---- cards (created once; render() positions or hides them)
