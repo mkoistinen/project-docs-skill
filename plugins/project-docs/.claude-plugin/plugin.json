@@ -1,0 +1,9 @@
+{
+  "name": "project-docs",
+  "version": "1.0.0",
+  "description": "Set up and maintain an ID-based project record in docs/: goals, concepts, decisions, experiments, findings and open items with permanent IDs, a stdlib-only consistency checker, and a dependency-graph dashboard.",
+  "author": {
+    "name": "mkoistinen"
+  },
+  "repository": "https://github.com/mkoistinen/project-docs-skill"
+}

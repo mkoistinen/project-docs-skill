@@ -1,0 +1,14 @@
+{
+  "name": "project-docs-skill",
+  "description": "An ID-based project record for Claude: decisions, experiments, findings and open items, with a checker and a dependency-graph dashboard.",
+  "owner": {
+    "name": "mkoistinen"
+  },
+  "plugins": [
+    {
+      "name": "project-docs",
+      "source": "./plugins/project-docs",
+      "description": "Set up and maintain an ID-based project record in docs/, with a link checker and a dependency-graph dashboard."
+    }
+  ]
+}
