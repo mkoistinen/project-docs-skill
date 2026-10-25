@@ -207,11 +207,15 @@ def parse(docs: Path) -> list[dict]:
             eid = m.group(1)
             prefix = eid.split("-")[0]
             state, label = classify(prefix, body)
+            due, due_note = "", ""
+            um = re.search(r"^- \*\*Due:\*\*\s*(\d{4}-\d{2}-\d{2})\s*(?:·\s*)?(.*)$", body, re.MULTILINE)
+            if um:
+                due, due_note = um.group(1), plain(um.group(2))
             nodes.append({
                 "id": eid, "prefix": prefix, "type": TYPE_LABEL[prefix], "num": int(eid.split("-")[1]),
                 "title": title, "file": name, "state": state, "label": label,
                 "deps": list(dict.fromkeys(deps)), "html": render(body.strip()),
-                "text": plain(body)[:4000],
+                "text": plain(body)[:4000], "due": due, "dueNote": due_note,
             })
     return nodes
 
@@ -348,17 +352,17 @@ TEMPLATE = r"""<!doctype html>
 :root{
   --bg:#f6f7f9; --panel:#ffffff; --card:#ffffff; --line:#d5d9e0; --text:#1d2330; --muted:#667085;
   --edge:#9aa3b2; --edge-hl:#2f6feb; --done:#1f9d55; --pending:#c98a0c; --muted-c:#98a2b3; --neutral:#2f6feb;
-  --bad:#d64545; --chip:#eef1f5; --shadow:0 1px 2px rgba(16,24,40,.06);
+  --bad:#d64545; --orange:#e8590c; --amber:#e3a008; --chip:#eef1f5; --shadow:0 1px 2px rgba(16,24,40,.06);
 }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
   --bg:#0d1117; --panel:#161b22; --card:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e;
   --edge:#5b636e; --edge-hl:#58a6ff; --done:#3fb950; --pending:#d29922; --muted-c:#6e7681; --neutral:#58a6ff;
-  --bad:#f85149; --chip:#21262d; --shadow:none;
+  --bad:#f85149; --orange:#f0883e; --amber:#e3b341; --chip:#21262d; --shadow:none;
 }}
 :root[data-theme="dark"]{
   --bg:#0d1117; --panel:#161b22; --card:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e;
   --edge:#5b636e; --edge-hl:#58a6ff; --done:#3fb950; --pending:#d29922; --muted-c:#6e7681; --neutral:#58a6ff;
-  --bad:#f85149; --chip:#21262d; --shadow:none;
+  --bad:#f85149; --orange:#f0883e; --amber:#e3b341; --chip:#21262d; --shadow:none;
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
@@ -444,7 +448,7 @@ body.panel-open #wrap{scroll-padding-right:min(460px,100vw)}
 .card .fbtn{position:absolute;top:5px;right:6px;width:22px;height:22px;padding:0;border:0;border-radius:50%;
   background:var(--chip);color:var(--muted);font-size:14px;line-height:22px;display:none;cursor:pointer}
 .card:hover .fbtn,.card.root .fbtn{display:block}
-.card:hover .type,.card.root .type{visibility:hidden}
+.card:hover .type,.card.root .type,.card:hover .due,.card.root .due,.card.picked .due{visibility:hidden}
 .card .fbtn:hover{color:var(--text)}
 .card.root .fbtn{background:var(--edge-hl);color:#fff}
 .card.root{box-shadow:0 0 0 1px var(--edge-hl)}
@@ -472,6 +476,15 @@ path.edge.pend.hl{stroke:var(--edge-hl);stroke-opacity:1}
 .fgroup[hidden]{display:none}
 #fgo{background:var(--edge-hl);border-color:var(--edge-hl);color:#fff;font-weight:600}
 .card.picked{box-shadow:0 0 0 1px var(--pending)}
+.card .due{font-size:11px;font-weight:600;white-space:nowrap}
+.due.d90{color:var(--amber)} .due.d60{color:var(--orange)} .due.d30,.due.over{color:var(--bad)} .due.later,.due.met{color:var(--muted)}
+.card.due-d90{--dc:var(--amber)} .card.due-d60{--dc:var(--orange)} .card.due-d30,.card.due-over{--dc:var(--bad)}
+.card.due-d90,.card.due-d60,.card.due-d30,.card.due-over{background:color-mix(in srgb,var(--dc) 16%,var(--card));border-color:color-mix(in srgb,var(--dc) 55%,var(--line))}
+.card.due-d30,.card.due-over{box-shadow:0 0 0 1px var(--bad)}
+.duebox.d90{border-left-color:var(--amber)} .duebox.d60{border-left-color:var(--orange)} .duebox.d30,.duebox.over{border-left-color:var(--bad)}
+#duebtn{border-color:var(--bad);color:var(--bad);font-weight:600}
+#duebtn[hidden]{display:none}
+.duebox{margin:8px 0;padding:6px 10px;border-left:3px solid var(--muted-c);background:var(--chip);border-radius:4px;font-size:12px}
 .card.picked .fbtn{display:block;background:var(--pending);color:#111}
 .card.picked .type{visibility:hidden}
 #etip{position:fixed;z-index:20;pointer-events:none;display:none;background:var(--panel);color:var(--text);
@@ -496,6 +509,7 @@ path.edge.pend.hl{stroke:var(--edge-hl);stroke-opacity:1}
   </div>
   <div class="tools">
     <input type="search" id="q" placeholder="Search cards…">
+    <button id="duebtn" hidden title="Focus on unsettled cards due within 90 days"></button>
     <button id="statusbtn">Status</button>
     <div class="seg" id="theme" role="group" aria-label="Color scheme">
       <button data-mode="system">System</button><button data-mode="light">Light</button><button data-mode="dark">Dark</button>
@@ -544,6 +558,20 @@ document.getElementById('stats').innerHTML = stats.map(([k,v])=>`<span>${k}: <b>
 
 // ---- cards (created once; render() positions or hides them)
 const pendingDeps = n => n.deps.filter(d=>byId.get(d).state==='pending').length;
+// ---- due dates: "- **Due:** YYYY-MM-DD · why" in an entry. Compared with the day the page is viewed.
+const DAY = 86400000;
+const today = (()=>{ const d = new Date(); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); })();
+function dueInfo(n){
+  if (!n.due) return null;
+  const [y,m,d] = n.due.split('-').map(Number);
+  const days = Math.round((Date.UTC(y, m-1, d) - today) / DAY);
+  const settled = n.state==='done' || n.state==='muted';
+  const short = new Date(Date.UTC(y, m-1, d)).toLocaleDateString(undefined, {month:'short', day:'numeric', year: y!==new Date().getFullYear() ? 'numeric' : undefined, timeZone:'UTC'});
+  // tiers: red within 30 days or overdue, orange within 60, amber within 90
+  const cls = settled ? 'met' : days < 0 ? 'over' : days <= 30 ? 'd30' : days <= 60 ? 'd60' : days <= 90 ? 'd90' : 'later';
+  const rel = days < 0 ? `${-days} day${days===-1?'':'s'} overdue` : days === 0 ? 'due today' : `in ${days} day${days===1?'':'s'}`;
+  return {days, settled, cls, short, rel, soon: !settled && days <= 90};
+}
 for (const n of nodes) {
   const el = document.createElement('div');
   el.className = 'card '+n.state; el.id = 'card-'+n.id;
@@ -555,7 +583,11 @@ for (const n of nodes) {
   } else if (p) {
     extra = `<span class="pill bad">${p} input${p>1?'s':''} pending</span>`;
   }
-  el.innerHTML = `<div class="top"><span class="id">${n.id}</span><span class="type">${n.type}</span></div>
+  const di = dueInfo(n);
+  if (di && di.soon) el.classList.add('due-'+di.cls);
+  const corner = di ? `<span class="due ${di.cls}" title="Due ${esc(n.due)}${n.dueNote ? ': '+esc(n.dueNote) : ''}">${di.settled ? 'Was due' : 'Due'} ${di.short}</span>`
+                    : `<span class="type">${n.type}</span>`;
+  el.innerHTML = `<div class="top"><span class="id">${n.id}</span>${corner}</div>
     <button class="fbtn" title="Focus on this card. Shift-click to pick several cards and focus on them together." aria-label="Focus on ${n.id}">◎</button>
     <div class="title" title="${esc(n.title)}">${esc(n.title)}</div>
     <div class="pills"><span class="pill ${n.state}" title="${esc(n.label)}">${esc(n.label.replace(/ \(.*\)$/, n.label.length>22?' *':'$&'))}</span>${extra}</div>`;
@@ -870,6 +902,7 @@ function select(id, scroll){
       <button class="x" id="pclose" title="Close" aria-label="Close">✕</button></div></div>
     <div class="pills"><span class="pill ${n.state}">${esc(n.label)}</span>
       ${pend? `<span class="pill bad">${pend} input${pend>1?'s':''} pending</span>`:''}</div>
+    ${(()=>{ const d = dueInfo(n); return d ? `<div class="duebox ${d.cls}"><b>Due ${esc(n.due)}</b> (${d.settled ? 'settled' : d.rel})${n.dueNote ? ' · '+esc(n.dueNote) : ''}</div>` : ''; })()}
     <div class="sec">Depends on (${n.deps.length})</div>
     ${n.deps.length? n.deps.map(rel).join('') : '<div class="meta">Nothing. This is a foundation.</div>'}
     <div class="sec">Used by (${n.children.length})</div>
@@ -993,6 +1026,16 @@ document.getElementById('q').addEventListener('input', e=>{
   nodes.forEach(n=>n.el.classList.toggle('nomatch', !!q &&
     !(n.id.toLowerCase().includes(q) || n.title.toLowerCase().includes(q) || n.text.toLowerCase().includes(q))));
 });
+
+// ---- "Due soon" button: focuses on unsettled cards due within 90 days (or overdue)
+const dueSoon = nodes.filter(n=>{ const d = dueInfo(n); return d && d.soon; }).sort((a,b)=>a.due.localeCompare(b.due));
+const dueBtn = document.getElementById('duebtn');
+if (dueSoon.length) {
+  dueBtn.hidden = false;
+  dueBtn.textContent = `Due soon (${dueSoon.length})`;
+  dueBtn.title = 'Focus on: ' + dueSoon.map(n=>`${n.id} (${n.due})`).join(', ');
+  dueBtn.addEventListener('click', e=>{ e.stopPropagation(); setFocus(dueSoon.map(n=>n.id)); });
+}
 
 // ---- status box and theme
 const sb = document.getElementById('statusbox');

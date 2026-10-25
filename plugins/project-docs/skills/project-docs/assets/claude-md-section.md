@@ -13,6 +13,7 @@
 | Code changes what a doc describes | Update the affected docs and diagrams in the same task. |
 | The overall state changes | Update **Status** and **History** in [{{DOCS}}/README.md]({{DOCS}}/README.md). |
 | An entry is added, or what it builds on changes | Give it a `- **Depends on:**` bullet straight after its title, linking the IDs it builds on. These drive the arrows in `dashboard.html`. |
+| Something has a deadline | Add `- **Due:** YYYY-MM-DD · why` after its Depends on line, so the dashboard flags it as it gets close. |
 
 Write entries **as things happen**, while the numbers and rationale are at hand. IDs are `PREFIX-NNN`: take the next free number, and never renumber or reuse one. Every entry is an `<a id="DEC-007"></a>` anchor, then a heading that is **exactly the ID** (`### DEC-007`), then the title in bold on its own line. Obsidian only follows links to headings that match exactly, so link to entries by ID and don't link to other headings by slug (such as `#status`). Cite IDs in code comments and messages where they explain *why*.
 

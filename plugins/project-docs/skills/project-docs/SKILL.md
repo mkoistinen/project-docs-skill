@@ -111,6 +111,10 @@ Before writing entries, read `references/conventions.md` for the formats, good e
 - Plain citations are not dependencies. An entry often mentions items it *feeds* or partly answers; those are not in its `Depends on` line, because they belong in the other entry's line. Choose the direction deliberately, keep the graph acyclic (the builder stops on a cycle), and show the user the choices for review the first time.
 - When adding Depends on lines to an existing record with a script, make sure the pattern can't match the entry templates inside HTML comments.
 
+### Due dates
+
+An entry with a deadline gets `- **Due:** YYYY-MM-DD · why` straight after its `Depends on` bullet (or after the title if it has none). Use it for real deadlines: a filing date, a payroll cutoff, a window that closes. The dashboard compares the date with the day the page is opened, so the colors stay current without a rebuild.
+
 ### What the dashboard does (keep these when changing the builder)
 
 - **Layout:** column = longest dependency path. Entries with no dependencies are pulled right, next to their first consumer, so arrows stay short. Rows are ordered by barycenter sweeps to reduce crossings, and isolated entries sink to the bottom. The left column is labeled Foundations and the right one Goals.
@@ -133,6 +137,7 @@ Before writing entries, read `references/conventions.md` for the formats, good e
   - Controls: a ◎ icon on card hover; a Focus / Unfocus button in the panel; and a focus bar under the header with removable chips, an "Add a card…" box, an "Unsettled only" switch, and Exit. "Unsettled only" hides settled inputs and joins the arrows across them.
   - Several cards: in the full map, Shift-click ◎ *picks* cards without filtering anything (amber ◎, and a "Picked" bar with Focus on N cards / Clear). Then "Focus on N cards" or a plain ◎ shows the union of their chains. Picking comes first because, once one card is focused, the visible cards are already in its chain and the rest are hidden. Inside a focus, Shift-click ◎ adds a visible card (useful on the faded direct users), and "Add a card…" adds any card.
   - The focus lives in the address (`#focus=ID,ID&only=unsettled&card=ID`), so it survives reloads and rebuilds.
+- **Due dates:** a card with a `Due` line shows "Due Mon D" in place of its type. Unsettled cards are tinted by how close the date is: red within 30 days or overdue (with a red outline), orange within 60, amber within 90. Settled cards show "Was due" untinted. The panel shows the date, the days left, and the reason. A "Due soon (N)" header button focuses on every unsettled card due within 90 days.
   - Esc closes the panel first, then exits focus, then clears picks. Opening a card that isn't in view leaves focus.
 - **Title:** `<README heading> Map` by default, or `--title`.
 
